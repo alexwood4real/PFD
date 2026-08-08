@@ -9,6 +9,7 @@
  * Main driver in order to calculate everything given from
  * BME 280 sensor. Gets temp, humidity, pressure, and others
  **************************************************************/
+use serde::Serialize;
 
 /* holds initial sensor reading data */
 pub struct SensorData {
@@ -18,6 +19,7 @@ pub struct SensorData {
 }
 
 /* holds calculated data */
+#[derive(Serialize)]
 pub struct PsychometricData {
     pub temperature: f32,               /* °C */
     pub pressure: f32,                  /* Pascals */

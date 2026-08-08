@@ -31,6 +31,7 @@ use embassy_rp::{
 };
 use embassy_time::{Delay, Duration, Timer};
 use log::info;
+use serde_json_core;
 use static_cell::StaticCell;
 
 /* local crates */
@@ -40,6 +41,7 @@ use crate::calc::psychometric::SensorData;
 mod calc;
 
 /* Constants */
+const BUF_SIZE: usize = 1 << 9;
 const WIFI_NETWORK: &str = env!("WIFI_SSID");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
 use {defmt_rtt as _, panic_probe as _};
@@ -186,32 +188,29 @@ async fn main(spawner: Spawner) {
 
     /* infinite main loop */
     loop {
-        /* takes all data from a single sample instead of three different ones */
+        /* read data from single sample */
         let measurements: bme280_rs::Sample = unwrap!(bme280.read_sample().await);
 
+        /* convert sample to readable data */
         let sensor_data: SensorData = SensorData {
             temperature: measurements.temperature,
             pressure: measurements.pressure,
             humidity: measurements.humidity,
         };
 
+        /* compute weather data from sensor data */
         if let Some(weather_data) = sensor_data.calculate() {
-            /* DEBUG: display values */
-            info!("temp: {}", weather_data.temperature);
-            info!("press: {}", weather_data.pressure);
-            info!("hum: {}", weather_data.humidity);
-            info!("alt: {}", weather_data.altitude);
-            info!("svp: {}", weather_data.saturation_vapor_pressure);
-            info!("vp: {}", weather_data.vapor_pressure);
-            info!("dp: {}", weather_data.dew_point);
-            info!("vpd: {}", weather_data.vapor_pressure_deficit);
-            info!("ah: {}", weather_data.absolute_humidity);
-            info!("mr: {}", weather_data.mixing_ratio);
-            info!("sh: {}", weather_data.specific_humidity);
-            info!("ad: {}", weather_data.air_density);
-            info!("ent: {}", weather_data.enthalpy);
-            info!("wb: {}", weather_data.wet_bulb);
-            info!("hi: {}", weather_data.heat_index);
+            /* serialize to json */
+            let mut buf = [0u8; BUF_SIZE];
+            match serde_json_core::to_slice(&weather_data, &mut buf) {
+                Ok(len) => {
+                    let json_bytes = &buf[..len];
+                    if let Ok(json_str) = core::str::from_utf8(json_bytes) {
+                        info!("JSON: {}", json_str);
+                    }
+                }
+                Err(err) => info!("Serialization failed, error: {:?}", err)
+            }
         } else {
             info!("Failed to read sample from sensor");
         }
