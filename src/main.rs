@@ -20,13 +20,7 @@ use cyw43::{JoinOptions, NetDriver, Runner as Cyw43Runner, SpiBus, aligned_bytes
 use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::{
-    IpListenEndpoint,
-    Runner as NetRunner,
-    Stack,
-    StackResources,
-    tcp::TcpSocket,
-};
+use embassy_net::{IpListenEndpoint, Runner as NetRunner, Stack, StackResources, tcp::TcpSocket};
 use embassy_rp::{
     bind_interrupts,
     dma::{Channel as DmaChannel, InterruptHandler as DmaHandler},
@@ -36,11 +30,7 @@ use embassy_rp::{
     pio::{InterruptHandler as PioHanlder, Pio},
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
-use embassy_sync::{
-    blocking_mutex::{
-        raw::CriticalSectionRawMutex, 
-        Mutex},
-};
+use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_io_async::Write;
 use log::info;
@@ -68,10 +58,8 @@ struct WeatherPacket {
 }
 
 /* Statics */
-static WEATHER_DATA: Mutex<
-    CriticalSectionRawMutex, 
-    RefCell<Option<WeatherPacket>>,
-> = Mutex::new(RefCell::new(None));
+static WEATHER_DATA: Mutex<CriticalSectionRawMutex, RefCell<Option<WeatherPacket>>> =
+    Mutex::new(RefCell::new(None));
 
 /* Interrupt Handlers */
 bind_interrupts!(struct Irqs {
@@ -122,27 +110,31 @@ async fn tcp_server_task(stack: Stack<'static>) -> ! {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
 
         info!("Waiting for connection");
-        if let Err(e) = socket.accept(IpListenEndpoint { addr: None, port: PORT }).await {
+        if let Err(e) = socket
+            .accept(IpListenEndpoint {
+                addr: None,
+                port: PORT,
+            })
+            .await
+        {
             info!("Accept error: {:?}", e);
             continue;
         }
 
         info!("client connected");
-        let pkt = WEATHER_DATA.lock(|data| {
-            *data.borrow()
-        });
+        let pkt = WEATHER_DATA.lock(|data| *data.borrow());
 
         if let Some(pkt) = pkt {
-           if let Err(e) = socket.write_all(&pkt.data[..pkt.len]).await {
+            if let Err(e) = socket.write_all(&pkt.data[..pkt.len]).await {
                 info!("Write error: {:?}", e);
-            } 
+            }
         } else {
             info!("No weather data available yet");
         }
-        
+
         /* wait 2 sec before closing socket */
         Timer::after(Duration::from_secs(2)).await;
-        
+
         socket.close();
     }
 }
@@ -211,10 +203,7 @@ async fn main(spawner: Spawner) {
     /* try to join the network until success */
     loop {
         match control
-            .join(
-                WIFI_NETWORK,
-                JoinOptions::new(WIFI_PASSWORD.as_bytes()),
-            )
+            .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
             .await
         {
             Ok(_) => break,
@@ -273,16 +262,13 @@ async fn main(spawner: Spawner) {
                         info!("JSON: {}", json_str);
                     }
 
-                    let pkt = WeatherPacket {
-                        data: buf,
-                        len
-                    };
+                    let pkt = WeatherPacket { data: buf, len };
 
                     WEATHER_DATA.lock(|data| {
                         data.borrow_mut().replace(pkt);
                     });
                 }
-                Err(err) => info!("Serialization failed, error: {:?}", err)
+                Err(err) => info!("Serialization failed, error: {:?}", err),
             }
         } else {
             info!("Failed to read sample from sensor");
