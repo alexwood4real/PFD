@@ -1,0 +1,17 @@
+{
+    "temperature": 22.19,
+    "pressure": 96115.99,
+    "humidity": 55.40625,
+    "altitude": 1452.5714,
+    "saturation_vapor_pressure": 26.737375,
+    "vapor_pressure": 14.814177,
+    "dew_point": 12.838549,
+    "vapor_pressure_deficit": 11.923199,
+    "absolute_humidity": 10.871622,
+    "mixing_ratio": 9.736371,
+    "specific_humidity": 0.009642488,
+    "air_density": 1.1271098,
+    "enthalpy": 47.07566,
+    "wet_bulb": 16.344902,
+    "heat_index": 71.4403
+}
