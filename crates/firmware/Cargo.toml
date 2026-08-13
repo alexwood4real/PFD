@@ -26,13 +26,13 @@ cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"] }
 cyw43-pio = { version = "0.10.0", features = ["defmt"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0" }
 embedded-hal-async = "1.0"
-embedded-hal-bus = { version = "0.1", features = ["async"] }
+embedded-hal-bus = { version = "0.3", features = ["async"] }
 embedded-io-async = { version = "0.7.0", features = ["defmt"] }
 embedded-storage = { version = "0.3" }
 static_cell = "2.1"
 portable-atomic = { version = "1.5", features = ["critical-section"] }
 log = "0.4"
-embedded-sdmmc = "0.7.0"
+embedded-sdmmc = "0.10.0"
 serde-json-core = "0.6"
 
 [build-dependencies]
@@ -42,4 +42,4 @@ regex = "1.11.0"
 panic-probe = { version = "1", features = ["print-defmt"] }
 
 [target."thumbv8m.main-none-eabihf".dependencies]
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+rp235x-hal = { version = "0.4", features = ["rt", "critical-section-impl"] }
