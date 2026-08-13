@@ -1,0 +1,8 @@
+[package]
+edition = "2024"
+name = "gdu"
+version = "0.1.0"
+
+[dependencies]
+libm = "0.2"
+serde = { version = "1.0", default-features = false, features = ["derive"] }

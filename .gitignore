@@ -110,4 +110,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Personal
+.cargo/config.toml
+
 # End of https://www.toptal.com/developers/gitignore/api/rust,visualstudiocode,macos,windows,linux

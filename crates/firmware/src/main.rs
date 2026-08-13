@@ -33,15 +33,10 @@ use embassy_rp::{
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_io_async::Write;
+use gdu::psychometric::SensorData;
 use log::info;
 use serde_json_core;
 use static_cell::StaticCell;
-
-/* local crates */
-use crate::calc::psychometric::SensorData;
-
-/* mods */
-mod calc;
 
 /* Constants */
 const PORT: u16 = 8080;
