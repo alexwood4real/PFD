@@ -15,18 +15,14 @@
 
 /* Crates */
 use core::cell::RefCell;
-use cyw43::{JoinOptions, aligned_bytes};
-use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::StackResources;
 use embassy_rp::{
     bind_interrupts,
-    dma::{Channel as DmaChannel, InterruptHandler as DmaHandler},
-    gpio::{Level, Output},
+    dma::{InterruptHandler as DmaHandler},
     i2c::{InterruptHandler as I2cHandler},
     peripherals::{DMA_CH0, I2C0, PIO0, USB},
-    pio::{InterruptHandler as PioHanlder, Pio},
+    pio::{InterruptHandler as PioHanlder},
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
@@ -34,26 +30,20 @@ use embassy_time::{Duration, Timer};
 use gdu::psychometric::SensorData;
 use log::info;
 use serde_json_core;
-use static_cell::StaticCell;
 
 /* Tasks */
 mod tasks;
-use tasks::{
-    cyw43_task::cyw43_task,
-    heartbeat_task::heartbeat_task,
-    logger_task::logger_task,
-    net_task::net_task,
-    tcp_server_task::tcp_server_task
-};
+use tasks::logger_task::logger_task;
 
 /* Drivers */
 mod drivers;
-use drivers::bme280_driver::init_bme280;
+use drivers::{
+    bme280_driver::init_bme280,
+    cyw43_driver::init_cyw43
+};
 
 /* Constants */
 const BUF_SIZE: usize = 1 << 9;
-const WIFI_NETWORK: &str = env!("WIFI_SSID");
-const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
 
 use {defmt_rtt as _, panic_probe as _};
 
@@ -87,78 +77,11 @@ async fn main(spawner: Spawner) {
     let driver = UsbDriver::new(p.USB, Irqs);
     spawner.spawn(unwrap!(logger_task(driver)));
 
-    /* Load Wi-Fi firmware */
-    let fw: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("cyw43-firmware/43439A0.bin");
-    let clm: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("cyw43-firmware/43439A0_clm.bin");
-    let nvram: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("cyw43-firmware/nvram_rp2040.bin");
-
-    /* Configure GPIO's and PIO/SPI */
-    let pwr: Output<'_> = Output::new(p.PIN_23, Level::Low);
-    let cs: Output<'_> = Output::new(p.PIN_25, Level::High);
-    let mut pio: Pio<'_, PIO0> = Pio::new(p.PIO0, Irqs);
-    let spi: PioSpi<'_, PIO0, 0> = PioSpi::new(
-        &mut pio.common,
-        pio.sm0,
-        RM2_CLOCK_DIVIDER,
-        pio.irq0,
-        cs,
-        p.PIN_24,
-        p.PIN_29,
-        DmaChannel::new(p.DMA_CH0, Irqs),
-    );
-
-    /* Allocate state driver */
-    static STATE: StaticCell<cyw43::State> = StaticCell::new();
-
-    /* Create CYW43 driver */
-    let state: &mut cyw43::State = STATE.init(cyw43::State::new());
-    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
-
-    /* turn on background driver */
-    spawner.spawn(unwrap!(cyw43_task(runner)));
-
-    /* set up the control */
-    control.init(clm).await;
-    control
-        .set_power_management(cyw43::PowerManagementMode::PowerSave)
-        .await;
-
-    /* configure network stack */
-    let net_config = embassy_net::Config::dhcpv4(Default::default());
-    let seed: u64 = 0x0123_4567_89ab_cdef;
-
-    static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
-    let (stack, net_runner) = embassy_net::new(
-        net_device,
-        net_config,
-        RESOURCES.init(StackResources::new()),
-        seed,
-    );
-
-    spawner.spawn(unwrap!(net_task(net_runner)));
-
-    /* try to join the network until success */
-    loop {
-        match control
-            .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
-            .await
-        {
-            Ok(_) => break,
-            Err(err) => info!("Failed to join network, status = {:?}", err),
-        }
-    }
-
-    /* Wi-Fi has been connected, waiting for DHCP */
-    stack.wait_config_up().await;
-
-    /* turn on heartbeat */
-    spawner.spawn(unwrap!(heartbeat_task(control)));
+    /* Configure CYW43 chip */
+    init_cyw43(spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs).await;
 
     /* Configure BME 280 sensor */
     let mut bme280 = init_bme280( p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
-
-    /* turn on tcp server */
-    spawner.spawn(unwrap!(tcp_server_task(stack)));
 
     /* infinite main loop */
     loop {

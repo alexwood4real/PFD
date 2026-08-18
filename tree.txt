@@ -1,0 +1,52 @@
+.
+├── Cargo.lock
+├── Cargo.toml
+├── LICENSE-APACHE
+├── LICENSE-MIT
+├── README.md
+├── crates
+│   ├── firmware
+│   │   ├── Cargo.toml
+│   │   ├── build.rs
+│   │   ├── display.sh
+│   │   ├── load_pico.sh
+│   │   ├── rp2350.x
+│   │   └── src
+│   │       ├── cyw43-firmware
+│   │       │   ├── 43439A0.bin
+│   │       │   ├── 43439A0_clm.bin
+│   │       │   └── nvram_rp2040.bin
+│   │       ├── drivers
+│   │       │   ├── bme280_driver.rs
+│   │       │   └── cyw43_driver.rs
+│   │       ├── drivers.rs
+│   │       ├── main.rs
+│   │       ├── tasks
+│   │       │   ├── cyw43_task.rs
+│   │       │   ├── heartbeat_task.rs
+│   │       │   ├── logger_task.rs
+│   │       │   ├── net_task.rs
+│   │       │   └── tcp_server_task.rs
+│   │       └── tasks.rs
+│   └── gdu
+│       ├── Cargo.toml
+│       └── src
+│           ├── lib.rs
+│           ├── psychometric
+│           │   ├── absolute_humidity.rs
+│           │   ├── air_denisty.rs
+│           │   ├── altitude.rs
+│           │   ├── dew_point.rs
+│           │   ├── enthalpy.rs
+│           │   ├── heat_index.rs
+│           │   ├── mixing_ratio.rs
+│           │   ├──  saturation_vapor_pressure.rs
+│           │   ├── specific_humidity.rs
+│           │   ├── vapor_pressure.rs
+│           │   ├── vapor_pressure_deficit.rs
+│           │   └── wet_bulb.rs
+│           └── psychometric.rs
+├── reading.json
+└── tree.txt
+
+10 directories, 40 files
