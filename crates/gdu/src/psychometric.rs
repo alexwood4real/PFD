@@ -74,7 +74,7 @@ impl SensorData {
         let hum: f32 = self.humidity?;
 
         /* collect data */
-        let alt: f32 = altitude::calculate_altitude(pres);
+        let alt: f32 = calculate_altitude(pres);
         let svp: f32 = calculate_saturation_vapor_pressure(temp);
         let vp: f32 = calculate_vapor_pressure(svp, hum);
         let dp: f32 = calculate_dew_point(vp);

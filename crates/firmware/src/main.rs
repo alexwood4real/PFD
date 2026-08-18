@@ -1,48 +1,60 @@
 /**************************************************************
  * SPDX-License-Identifier: MIT OR Apache-2.0
- * Barometer
+ * PFD
  *
  * FILE:
  * main.rs
  *
  * Description:
- * Main loop to collect data from BME 280 sensor
  * Blinking LED ensures Wi-Fi connection and data collection
+ * Using BME280, MPU6050, QMC5883P sensors and GPS Module
  **************************************************************/
 
 #![no_std]
 #![no_main]
 
-/* public crates */
-use bme280_rs::{AsyncBme280, Configuration, Oversampling, SensorMode};
+/* Crates */
 use core::cell::RefCell;
-use cyw43::{JoinOptions, NetDriver, Runner as Cyw43Runner, SpiBus, aligned_bytes};
+use cyw43::{JoinOptions, aligned_bytes};
 use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::{IpListenEndpoint, Runner as NetRunner, Stack, StackResources, tcp::TcpSocket};
+use embassy_net::StackResources;
 use embassy_rp::{
     bind_interrupts,
     dma::{Channel as DmaChannel, InterruptHandler as DmaHandler},
     gpio::{Level, Output},
-    i2c::{Config as I2cConfig, I2c, InterruptHandler as I2cHandler},
+    i2c::{InterruptHandler as I2cHandler},
     peripherals::{DMA_CH0, I2C0, PIO0, USB},
     pio::{InterruptHandler as PioHanlder, Pio},
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
-use embassy_time::{Delay, Duration, Timer};
-use embedded_io_async::Write;
+use embassy_time::{Duration, Timer};
 use gdu::psychometric::SensorData;
 use log::info;
 use serde_json_core;
 use static_cell::StaticCell;
 
+/* Tasks */
+mod tasks;
+use tasks::{
+    cyw43_task::cyw43_task,
+    heartbeat_task::heartbeat_task,
+    logger_task::logger_task,
+    net_task::net_task,
+    tcp_server_task::tcp_server_task
+};
+
+/* Drivers */
+mod drivers;
+use drivers::bme280_driver::init_bme280;
+
 /* Constants */
-const PORT: u16 = 8080;
 const BUF_SIZE: usize = 1 << 9;
 const WIFI_NETWORK: &str = env!("WIFI_SSID");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
+
 use {defmt_rtt as _, panic_probe as _};
 
 /* Structs */
@@ -64,79 +76,9 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ =>UsbHandler<USB>;
 });
 
-/* Async functions */
-#[embassy_executor::task]
-async fn cyw43_task(
-    runner: Cyw43Runner<'static, SpiBus<Output<'static>, PioSpi<'static, PIO0, 0>>>,
-) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn heartbeat(mut control: cyw43::Control<'static>) -> ! {
-    info!("Heartbeat start");
-    let delay: Duration = Duration::from_millis(500);
-
-    loop {
-        control.gpio_set(0, true).await;
-        Timer::after(delay).await;
-
-        control.gpio_set(0, false).await;
-        Timer::after(delay).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn logger_task(driver: UsbDriver<'static, USB>) {
-    embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
-}
-
-#[embassy_executor::task]
-async fn net_task(mut runner: NetRunner<'static, NetDriver<'static>>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn tcp_server_task(stack: Stack<'static>) -> ! {
-    let mut rx_buffer = [0u8; 1024];
-    let mut tx_buffer = [0u8; 1024];
-
-    loop {
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-
-        info!("Waiting for connection");
-        if let Err(e) = socket
-            .accept(IpListenEndpoint {
-                addr: None,
-                port: PORT,
-            })
-            .await
-        {
-            info!("Accept error: {:?}", e);
-            continue;
-        }
-
-        info!("client connected");
-        let pkt = WEATHER_DATA.lock(|data| *data.borrow());
-
-        if let Some(pkt) = pkt {
-            if let Err(e) = socket.write_all(&pkt.data[..pkt.len]).await {
-                info!("Write error: {:?}", e);
-            }
-        } else {
-            info!("No weather data available yet");
-        }
-
-        /* wait 2 sec before closing socket */
-        Timer::after(Duration::from_secs(2)).await;
-
-        socket.close();
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    info!("Barometer start");
+    info!("PFD start");
 
     /* Init RP2350 peripherals */
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
@@ -210,26 +152,10 @@ async fn main(spawner: Spawner) {
     stack.wait_config_up().await;
 
     /* turn on heartbeat */
-    spawner.spawn(unwrap!(heartbeat(control)));
+    spawner.spawn(unwrap!(heartbeat_task(control)));
 
     /* Configure BME 280 sensor */
-    let i2c = I2c::new_async(p.I2C0, p.PIN_5, p.PIN_4, Irqs, I2cConfig::default());
-    let delay = Delay;
-    let mut bme280 = AsyncBme280::new(i2c, delay);
-
-    unwrap!(bme280.init().await);
-
-    unwrap!(
-        bme280
-            .set_sampling_configuration(
-                Configuration::default()
-                    .with_temperature_oversampling(Oversampling::Oversample1)
-                    .with_pressure_oversampling(Oversampling::Oversample1)
-                    .with_humidity_oversampling(Oversampling::Oversample1)
-                    .with_sensor_mode(SensorMode::Normal)
-            )
-            .await
-    );
+    let mut bme280 = init_bme280( p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
 
     /* turn on tcp server */
     spawner.spawn(unwrap!(tcp_server_task(stack)));
