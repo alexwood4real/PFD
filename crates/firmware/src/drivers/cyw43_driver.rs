@@ -4,20 +4,18 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::StackResources;
 use embassy_rp::{
+    Peri,
     dma::Channel,
     gpio::{Level, Output},
-    peripherals::{PIO0, PIN_23, PIN_24, PIN_25, PIN_29, DMA_CH0},
+    peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0},
     pio::Pio,
-    Peri
 };
 use static_cell::StaticCell;
 
 /* Tasks */
 use crate::tasks::{
-    cyw43_task::cyw43_task,
-    heartbeat_task::heartbeat_task,
-    net_task::net_task,
-    tcp_server_task::tcp_server_task
+    cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task,
+    tcp_server_task::tcp_server_task,
 };
 
 /* Constants */
@@ -32,12 +30,13 @@ pub async fn init_cyw43(
     dio: Peri<'static, PIN_24>,
     clk: Peri<'static, PIN_29>,
     dma: Peri<'static, DMA_CH0>,
-    irqs: crate::Irqs
+    irqs: crate::Irqs,
 ) {
     /* Load Wi-Fi firmware */
     let fw: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0.bin");
     let clm: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0_clm.bin");
-    let nvram: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/nvram_rp2040.bin");
+    let nvram: &cyw43::Aligned<cyw43::A4, [u8]> =
+        aligned_bytes!("../cyw43-firmware/nvram_rp2040.bin");
 
     /* Configure GPIO's and PIO/SPI */
     let pwr: Output<'_> = Output::new(low, Level::Low);

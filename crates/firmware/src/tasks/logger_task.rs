@@ -1,7 +1,4 @@
-use embassy_rp::{
-    peripherals::USB,
-    usb::Driver
-};
+use embassy_rp::{peripherals::USB, usb::Driver};
 
 #[embassy_executor::task]
 pub async fn logger_task(driver: Driver<'static, USB>) {

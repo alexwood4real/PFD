@@ -1,6 +1,6 @@
-use embedded_io_async::Write;
 use embassy_net::{IpListenEndpoint, Stack, tcp::TcpSocket};
 use embassy_time::{Duration, Timer};
+use embedded_io_async::Write;
 use log::info;
 
 use crate::WEATHER_DATA;

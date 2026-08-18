@@ -19,10 +19,10 @@ use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::{
     bind_interrupts,
-    dma::{InterruptHandler as DmaHandler},
-    i2c::{InterruptHandler as I2cHandler},
+    dma::InterruptHandler as DmaHandler,
+    i2c::InterruptHandler as I2cHandler,
     peripherals::{DMA_CH0, I2C0, PIO0, USB},
-    pio::{InterruptHandler as PioHanlder},
+    pio::InterruptHandler as PioHanlder,
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
 use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
@@ -37,10 +37,7 @@ use tasks::logger_task::logger_task;
 
 /* Drivers */
 mod drivers;
-use drivers::{
-    bme280_driver::init_bme280,
-    cyw43_driver::init_cyw43
-};
+use drivers::{bme280_driver::init_bme280, cyw43_driver::init_cyw43};
 
 /* Constants */
 const BUF_SIZE: usize = 1 << 9;
@@ -78,10 +75,13 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(logger_task(driver)));
 
     /* Configure CYW43 chip */
-    init_cyw43(spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs).await;
+    init_cyw43(
+        spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs,
+    )
+    .await;
 
     /* Configure BME 280 sensor */
-    let mut bme280 = init_bme280( p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
+    let mut bme280 = init_bme280(p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
 
     /* infinite main loop */
     loop {

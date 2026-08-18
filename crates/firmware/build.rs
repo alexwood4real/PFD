@@ -11,7 +11,6 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
-
     // Put the linker script somewhere the linker can find it
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
     println!("cargo:rustc-link-search={}", out.display());
