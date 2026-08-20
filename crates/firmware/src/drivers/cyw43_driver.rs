@@ -1,6 +1,5 @@
 use cyw43::{JoinOptions, aligned_bytes};
 use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
-use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::StackResources;
 use embassy_rp::{
@@ -10,13 +9,12 @@ use embassy_rp::{
     peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0},
     pio::Pio,
 };
+use embassy_time::{Duration, with_timeout};
+use log::{error, info};
 use static_cell::StaticCell;
 
 /* Tasks */
-use crate::tasks::{
-    cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task,
-    tcp_server_task::tcp_server_task,
-};
+use crate::tasks::{cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task};
 
 /* Constants */
 const WIFI_NETWORK: &str = env!("WIFI_SSID");
@@ -32,6 +30,7 @@ pub async fn init_cyw43(
     dma: Peri<'static, DMA_CH0>,
     irqs: crate::Irqs,
 ) {
+    info!("Initializing CYW43 driver");
     /* Load Wi-Fi firmware */
     let fw: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0.bin");
     let clm: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0_clm.bin");
@@ -61,7 +60,8 @@ pub async fn init_cyw43(
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
 
     /* turn on background driver */
-    spawner.spawn(unwrap!(cyw43_task(runner)));
+    info!("CYW43 driver initialized");
+    spawner.spawn(cyw43_task(runner).unwrap());
 
     /* set up the control */
     control.init(clm).await;
@@ -81,25 +81,37 @@ pub async fn init_cyw43(
         seed,
     );
 
-    spawner.spawn(unwrap!(net_task(net_runner)));
+    info!("Spawn net_task");
+    spawner.spawn(net_task(net_runner).unwrap());
 
     /* try to join the network until success */
+    info!(
+        "Joining Network: {} with password: {}",
+        WIFI_NETWORK, WIFI_PASSWORD
+    );
     loop {
         match control
             .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
             .await
         {
-            Ok(_) => break,
+            Ok(_) => {
+                info!("Joined was successful");
+                break;
+            }
             Err(err) => info!("Failed to join network, status = {:?}", err),
         }
     }
 
     /* Wi-Fi has been connected, waiting for DHCP */
-    stack.wait_config_up().await;
+    info!("Wi-Fi connected");
+    match with_timeout(Duration::from_secs(20), stack.wait_config_up()).await {
+        Ok(()) => info!("DHCP up: {:?}", stack.config_v4()),
+        Err(_) => {
+            error!("DHCP timeout. link_up={}", stack.is_link_up());
+        }
+    }
 
     /* turn on heartbeat */
-    spawner.spawn(unwrap!(heartbeat_task(control)));
-
-    /* turn on tcp server */
-    spawner.spawn(unwrap!(tcp_server_task(stack)));
+    info!("Spawn heartbeat task");
+    spawner.spawn(heartbeat_task(control).unwrap());
 }

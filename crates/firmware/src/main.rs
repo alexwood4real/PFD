@@ -14,8 +14,10 @@
 #![no_main]
 
 /* Crates */
-use core::cell::RefCell;
-use defmt::*;
+use core::fmt::Write;
+use core::mem::MaybeUninit;
+use core::panic::PanicInfo;
+use core::ptr::{addr_of, addr_of_mut};
 use embassy_executor::Spawner;
 use embassy_rp::{
     bind_interrupts,
@@ -25,35 +27,16 @@ use embassy_rp::{
     pio::InterruptHandler as PioHanlder,
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
-use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Duration, Timer};
-use gdu::psychometric::SensorData;
-use log::info;
-use serde_json_core;
+use log::{error, info};
 
 /* Tasks */
 mod tasks;
-use tasks::logger_task::logger_task;
+use tasks::{bme280_task::bme280_task, logger_task::logger_task};
 
 /* Drivers */
 mod drivers;
 use drivers::{bme280_driver::init_bme280, cyw43_driver::init_cyw43};
-
-/* Constants */
-const BUF_SIZE: usize = 1 << 9;
-
-use {defmt_rtt as _, panic_probe as _};
-
-/* Structs */
-#[derive(Debug, Clone, Copy)]
-struct WeatherPacket {
-    data: [u8; BUF_SIZE],
-    len: usize,
-}
-
-/* Statics */
-static WEATHER_DATA: Mutex<CriticalSectionRawMutex, RefCell<Option<WeatherPacket>>> =
-    Mutex::new(RefCell::new(None));
 
 /* Interrupt Handlers */
 bind_interrupts!(struct Irqs {
@@ -63,6 +46,76 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ =>UsbHandler<USB>;
 });
 
+/* Constants */
+const PANIC_MAGIC: u32 = 0x5041_4E43;
+
+/* Debugging */
+#[repr(C)]
+struct PanicRecord {
+    magic: u32,
+    len: u32,
+    msg: [u8; 240],
+}
+
+// .uninit is not zeroed at boot, so this survives a reset
+#[unsafe(link_section = ".uninit.panic_record")]
+static mut PANIC_RECORD: MaybeUninit<PanicRecord> = MaybeUninit::uninit();
+
+struct Cursor<'a> {
+    buf: &'a mut [u8],
+    pos: usize,
+}
+impl Write for Cursor<'_> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let n = s.len().min(self.buf.len() - self.pos);
+        self.buf[self.pos..self.pos + n].copy_from_slice(&s.as_bytes()[..n]);
+        self.pos += n;
+        Ok(())
+    }
+}
+
+fn record(args: core::fmt::Arguments) -> ! {
+    unsafe {
+        let rec = addr_of_mut!(PANIC_RECORD) as *mut PanicRecord;
+        let mut c = Cursor {
+            buf: &mut *addr_of_mut!((*rec).msg),
+            pos: 0,
+        };
+        let _ = c.write_fmt(args);
+        (*rec).len = c.pos as u32;
+        (*rec).magic = PANIC_MAGIC;
+    }
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    record(format_args!("{}", info))
+}
+
+#[cortex_m_rt::exception]
+unsafe fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
+    record(format_args!(
+        "HardFault pc={:#010x} lr={:#010x}",
+        ef.pc(),
+        ef.lr()
+    ))
+}
+
+fn report_last_panic() {
+    unsafe {
+        let rec = addr_of_mut!(PANIC_RECORD) as *mut PanicRecord;
+        if core::ptr::read_volatile(addr_of!((*rec).magic)) == PANIC_MAGIC {
+            let len = (core::ptr::read_volatile(addr_of!((*rec).len)) as usize).min(240);
+            let msg = &*addr_of!((*rec).msg);
+            if let Ok(s) = core::str::from_utf8(&msg[..len]) {
+                log::error!("LAST PANIC: {}", s);
+            }
+            core::ptr::write_volatile(addr_of_mut!((*rec).magic), 0);
+        }
+    }
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!("PFD start");
@@ -71,67 +124,45 @@ async fn main(spawner: Spawner) {
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
 
     /* Initialize Logger */
+    info!("Configure logger");
     let driver = UsbDriver::new(p.USB, Irqs);
-    spawner.spawn(unwrap!(logger_task(driver)));
+    spawner.spawn(logger_task(driver).unwrap());
+    Timer::after(Duration::from_secs(3)).await;
+    report_last_panic();
 
     /* Configure CYW43 chip */
+    info!("Configuring CYW43 Wi-Fi chip");
     init_cyw43(
         spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs,
     )
     .await;
 
     /* Configure BME 280 sensor */
-    let mut bme280 = init_bme280(p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
+    info!("Configure BME 280 sensor");
+    let spi = p.SPI0;
+    let sck = p.PIN_18;
+    let sdi = p.PIN_19;
+    let sdo = p.PIN_16;
+    let cs = p.PIN_17;
+    let bme280 = match init_bme280(spi, sck, sdi, sdo, cs) {
+        Ok(b) => b,
+        Err(_) => loop {
+            error!("BME 280 init failed, check wiring");
+            Timer::after_secs(1).await;
+        },
+    };
 
-    /* infinite main loop */
-    loop {
-        /* read data from single sample */
-        let measurements: bme280_rs::Sample = unwrap!(bme280.read_sample().await);
-
-        /* convert sample to readable data */
-        let sensor_data: SensorData = SensorData {
-            temperature: measurements.temperature,
-            pressure: measurements.pressure,
-            humidity: measurements.humidity,
-        };
-
-        /* compute weather data from sensor data */
-        if let Some(weather_data) = sensor_data.calculate() {
-            /* serialize to json */
-            let mut buf = [0u8; BUF_SIZE];
-            match serde_json_core::to_slice(&weather_data, &mut buf) {
-                Ok(len) => {
-                    let json_bytes = &buf[..len];
-                    if let Ok(json_str) = core::str::from_utf8(json_bytes) {
-                        info!("JSON: {}", json_str);
-                    }
-
-                    let pkt = WeatherPacket { data: buf, len };
-
-                    WEATHER_DATA.lock(|data| {
-                        data.borrow_mut().replace(pkt);
-                    });
-                }
-                Err(err) => info!("Serialization failed, error: {:?}", err),
-            }
-        } else {
-            info!("Failed to read sample from sensor");
-        }
-
-        /* wait 1 sec before going again */
-        Timer::after(Duration::from_secs(1)).await;
-    }
+    /* launch sensor tasks */
+    info!("Spawn sensor tasks");
+    spawner.spawn(bme280_task(bme280).unwrap());
 }
 
 /* Metadata */
 #[unsafe(link_section = ".bi_entries")]
 #[used]
 pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
-    embassy_rp::binary_info::rp_program_name!(c"barometer"),
-    embassy_rp::binary_info::rp_program_description!(
-        c"This example tests the RP Pico 2 W's onboard LED, connected to GPIO 0 of the cyw43 \
-        (WiFi chip) via PIO 0 over the SPI bus."
-    ),
+    embassy_rp::binary_info::rp_program_name!(c"PFD"),
+    embassy_rp::binary_info::rp_program_description!(c"This program runs the Primary Flight Deck."),
     embassy_rp::binary_info::rp_cargo_version!(),
     embassy_rp::binary_info::rp_program_build_attribute!(),
 ];

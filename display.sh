@@ -4,7 +4,7 @@
 # og: screen /dev/tty.usbmodem21201 115200
 
 DEVICE=$(ls /dev/tty.usbmodem* 2>/dev/null | head -n 1)
-BAUD_RATE = 115200
+BAUD_RATE=115200
 
 if [ -z "$DEVICE" ]; then
     echo "No device found"
