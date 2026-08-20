@@ -40,9 +40,9 @@ pub use wet_bulb::calculate_wet_bulb;
 
 /* holds initial sensor reading data */
 pub struct SensorData {
-    pub temperature: Option<f32>, /* °C */
-    pub pressure: Option<f32>,    /* Pascals */
-    pub humidity: Option<f32>,    /* % water vapor in air  */
+    pub temperature: f32, /* °C */
+    pub pressure: f32,    /* Pascals */
+    pub humidity: f32,    /* % water vapor in air  */
 }
 
 /* holds calculated data */
@@ -69,9 +69,9 @@ pub struct PsychometricData {
 impl SensorData {
     pub fn calculate(&self) -> Option<PsychometricData> {
         /* unwrap values from sensor */
-        let temp: f32 = self.temperature?;
-        let pres: f32 = self.pressure?;
-        let hum: f32 = self.humidity?;
+        let temp: f32 = self.temperature;
+        let pres: f32 = self.pressure;
+        let hum: f32 = self.humidity;
 
         /* collect data */
         let alt: f32 = calculate_altitude(pres);

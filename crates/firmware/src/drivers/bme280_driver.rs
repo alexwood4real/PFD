@@ -1,35 +1,37 @@
-use bme280_rs::{AsyncBme280, Configuration, Oversampling, SensorMode};
+use bme280::spi::BME280;
 use defmt::*;
 use embassy_rp::{
-    Peri,
-    i2c::{Config, I2c},
-    peripherals::{I2C0, PIN_4, PIN_5},
+    Peri, 
+    peripherals::{SPI0, PIN_2, PIN_3, PIN_4, PIN_5}, 
+    spi::{Config, Spi},
+    gpio::{Level, Output}
 };
 use embassy_time::Delay;
+use embedded_hal_bus::spi::ExclusiveDevice;
 
-pub async fn init_bme280(
-    i2c_periph: Peri<'static, I2C0>,
-    sda: Peri<'static, PIN_4>,
-    scl: Peri<'static, PIN_5>,
-    irqs: crate::Irqs,
-) -> AsyncBme280<I2c<'static, I2C0, embassy_rp::i2c::Async>, Delay> {
-    let i2c = I2c::new_async(i2c_periph, scl, sda, irqs, Config::default());
-    let delay = Delay;
-    let mut bme280 = AsyncBme280::new(i2c, delay);
+type BME280Spi = ExclusiveDevice<
+    Spi<'static, SPI0, embassy_rp::spi::Blocking>,
+    Output<'static>,
+    Delay,
+>;
 
-    unwrap!(bme280.init().await);
+pub fn init_bme280(
+    spi_periph: Peri<'static, SPI0>,
+    sck: Peri<'static, PIN_2>,
+    sdi: Peri<'static, PIN_3>,
+    sdo: Peri<'static, PIN_4>,
+    cs: Peri<'static, PIN_5>,
+) -> BME280<BME280Spi> {
+    let mut config = Config::default();
+    config.frequency = 10_000_000; // 10 MHz
 
-    unwrap!(
-        bme280
-            .set_sampling_configuration(
-                Configuration::default()
-                    .with_temperature_oversampling(Oversampling::Oversample1)
-                    .with_pressure_oversampling(Oversampling::Oversample1)
-                    .with_humidity_oversampling(Oversampling::Oversample1)
-                    .with_sensor_mode(SensorMode::Normal)
-            )
-            .await
-    );
+    let cs = Output::new(cs, Level::High);
+    let spi_bus = Spi::new_blocking(spi_periph, sck, sdi, sdo, config);
+    let spi_device = unwrap!(ExclusiveDevice::new(spi_bus, cs, Delay));
+
+    let mut bme280 = BME280::new(spi_device).unwrap();
+
+    bme280.init(&mut Delay).unwrap();
 
     bme280
 }

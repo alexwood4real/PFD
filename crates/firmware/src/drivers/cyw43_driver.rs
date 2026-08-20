@@ -32,6 +32,7 @@ pub async fn init_cyw43(
     dma: Peri<'static, DMA_CH0>,
     irqs: crate::Irqs,
 ) {
+    info!("Initializing CYW43 driver");
     /* Load Wi-Fi firmware */
     let fw: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0.bin");
     let clm: &cyw43::Aligned<cyw43::A4, [u8]> = aligned_bytes!("../cyw43-firmware/43439A0_clm.bin");
@@ -60,6 +61,7 @@ pub async fn init_cyw43(
     let state: &mut cyw43::State = STATE.init(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
 
+    info!("CYW43 driver initialized");
     /* turn on background driver */
     spawner.spawn(unwrap!(cyw43_task(runner)));
 
@@ -94,6 +96,7 @@ pub async fn init_cyw43(
         }
     }
 
+    info!("Wi-Fi connected, waiting for DHCP");
     /* Wi-Fi has been connected, waiting for DHCP */
     stack.wait_config_up().await;
 

@@ -34,6 +34,7 @@ portable-atomic = { version = "1.5", features = ["critical-section"] }
 log = "0.4"
 embedded-sdmmc = "0.10.0"
 serde-json-core = "0.6"
+bme280 = "0.5.1"
 
 [build-dependencies]
 regex = "1.11.0"

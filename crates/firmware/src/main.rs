@@ -81,12 +81,12 @@ async fn main(spawner: Spawner) {
     .await;
 
     /* Configure BME 280 sensor */
-    let mut bme280 = init_bme280(p.I2C0, p.PIN_4, p.PIN_5, Irqs).await;
+    let mut bme280 = init_bme280(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, p.PIN_5);
 
     /* infinite main loop */
     loop {
         /* read data from single sample */
-        let measurements: bme280_rs::Sample = unwrap!(bme280.read_sample().await);
+        let measurements = bme280.measure(&mut embassy_time::Delay).unwrap();
 
         /* convert sample to readable data */
         let sensor_data: SensorData = SensorData {
