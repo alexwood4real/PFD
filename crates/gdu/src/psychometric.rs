@@ -10,8 +10,6 @@
  * BME 280 sensor. Gets temp, humidity, pressure, and others
  **************************************************************/
 
-use serde::Serialize;
-
 pub mod absolute_humidity;
 pub mod air_denisty;
 pub mod altitude;
@@ -46,7 +44,6 @@ pub struct SensorData {
 }
 
 /* holds calculated data */
-#[derive(Serialize)]
 pub struct PsychometricData {
     pub temperature: f32,               /* °C */
     pub pressure: f32,                  /* Pascals */

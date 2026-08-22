@@ -14,7 +14,6 @@
 #![no_main]
 
 /* Crates */
-use core::cell::RefCell;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::{
@@ -25,11 +24,9 @@ use embassy_rp::{
     pio::InterruptHandler as PioHanlder,
     usb::{Driver as UsbDriver, InterruptHandler as UsbHandler},
 };
-use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
 use embassy_time::{Duration, Timer};
 use gdu::psychometric::SensorData;
 use log::info;
-use serde_json_core;
 
 /* Tasks */
 mod tasks;
@@ -39,21 +36,7 @@ use tasks::logger_task::logger_task;
 mod drivers;
 use drivers::{bme280_driver::init_bme280, cyw43_driver::init_cyw43};
 
-/* Constants */
-const BUF_SIZE: usize = 1 << 9;
-
 use {defmt_rtt as _, panic_probe as _};
-
-/* Structs */
-#[derive(Debug, Clone, Copy)]
-struct WeatherPacket {
-    data: [u8; BUF_SIZE],
-    len: usize,
-}
-
-/* Statics */
-static WEATHER_DATA: Mutex<CriticalSectionRawMutex, RefCell<Option<WeatherPacket>>> =
-    Mutex::new(RefCell::new(None));
 
 /* Interrupt Handlers */
 bind_interrupts!(struct Irqs {
@@ -65,15 +48,16 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    info!("PFD start");
-
     /* Init RP2350 peripherals */
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
 
     /* Initialize Logger */
     let driver = UsbDriver::new(p.USB, Irqs);
     spawner.spawn(unwrap!(logger_task(driver)));
+    info!("Configured logger");
+    info!("PFD start");
 
+    info!("DEBUG Configuring CYW43 Wi-Fi chip");
     /* Configure CYW43 chip */
     init_cyw43(
         spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs,
@@ -81,10 +65,19 @@ async fn main(spawner: Spawner) {
     .await;
 
     /* Configure BME 280 sensor */
-    let mut bme280 = init_bme280(p.SPI0, p.PIN_2, p.PIN_3, p.PIN_4, p.PIN_5);
+    info!("BME PERIFERALS");
+    let spi = p.SPI0;
+    let sck = p.PIN_2;
+    let sdi = p.PIN_3;
+    let sdo = p.PIN_4;
+    let cs = p.PIN_5;
+    info!("BEFORE BME INIT");
+    let mut bme280 = init_bme280(spi, sck, sdi, sdo, cs);
+    info!("AFTER BME INIT");
 
     /* infinite main loop */
     loop {
+        info!("Alive");
         /* read data from single sample */
         let measurements = bme280.measure(&mut embassy_time::Delay).unwrap();
 
@@ -97,23 +90,22 @@ async fn main(spawner: Spawner) {
 
         /* compute weather data from sensor data */
         if let Some(weather_data) = sensor_data.calculate() {
-            /* serialize to json */
-            let mut buf = [0u8; BUF_SIZE];
-            match serde_json_core::to_slice(&weather_data, &mut buf) {
-                Ok(len) => {
-                    let json_bytes = &buf[..len];
-                    if let Ok(json_str) = core::str::from_utf8(json_bytes) {
-                        info!("JSON: {}", json_str);
-                    }
-
-                    let pkt = WeatherPacket { data: buf, len };
-
-                    WEATHER_DATA.lock(|data| {
-                        data.borrow_mut().replace(pkt);
-                    });
-                }
-                Err(err) => info!("Serialization failed, error: {:?}", err),
-            }
+            /* DEBUG print weather data */
+            info!("Temperature: {} C", weather_data.temperature);
+            info!("Pressure: {} hPa", weather_data.pressure);
+            info!("Humidity: {} %", weather_data.humidity);
+            info!("Altitude: {} ft", weather_data.altitude);
+            info!("Saturation Vapor Pressure: {} hPa", weather_data.saturation_vapor_pressure);
+            info!("Vapor Pressure: {} hPa", weather_data.vapor_pressure);
+            info!("Dew Point: {} C", weather_data.dew_point);
+            info!("Vapor Pressure Deficit: {} hPa", weather_data.vapor_pressure_deficit);
+            info!("Absolute Humidity: {} g/m^3", weather_data.absolute_humidity);
+            info!("Mixing Ratio: {} g water / kg dry air", weather_data.mixing_ratio); 
+            info!("Specific Humidity: {} g water / kg dry air", weather_data.specific_humidity);
+            info!("Air Density: {} kg / m^3", weather_data.air_density);
+            info!("Enthalpy: {} kJ/kg", weather_data.enthalpy);
+            info!("wet Bulb: {} C", weather_data.wet_bulb);
+            info!("Heat Index: {} F", weather_data.heat_index);
         } else {
             info!("Failed to read sample from sensor");
         }

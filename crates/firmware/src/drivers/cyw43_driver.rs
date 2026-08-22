@@ -10,12 +10,12 @@ use embassy_rp::{
     peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0},
     pio::Pio,
 };
+use log::info;
 use static_cell::StaticCell;
 
 /* Tasks */
 use crate::tasks::{
-    cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task,
-    tcp_server_task::tcp_server_task,
+    cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task
 };
 
 /* Constants */
@@ -61,8 +61,8 @@ pub async fn init_cyw43(
     let state: &mut cyw43::State = STATE.init(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
 
-    info!("CYW43 driver initialized");
     /* turn on background driver */
+    info!("CYW43 driver initialized");
     spawner.spawn(unwrap!(cyw43_task(runner)));
 
     /* set up the control */
@@ -83,9 +83,11 @@ pub async fn init_cyw43(
         seed,
     );
 
+    info!("Spawn net_task");
     spawner.spawn(unwrap!(net_task(net_runner)));
 
     /* try to join the network until success */
+    info!("DEBUG Joining Network: {} with password: {}", WIFI_NETWORK, WIFI_PASSWORD);
     loop {
         match control
             .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
@@ -96,13 +98,11 @@ pub async fn init_cyw43(
         }
     }
 
-    info!("Wi-Fi connected, waiting for DHCP");
     /* Wi-Fi has been connected, waiting for DHCP */
+    info!("DEBUG Wi-Fi connected");
     stack.wait_config_up().await;
 
     /* turn on heartbeat */
+    info!("DEBUG Spawn heartbeat task");
     spawner.spawn(unwrap!(heartbeat_task(control)));
-
-    /* turn on tcp server */
-    spawner.spawn(unwrap!(tcp_server_task(stack)));
 }
