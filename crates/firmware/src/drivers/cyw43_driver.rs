@@ -93,7 +93,10 @@ pub async fn init_cyw43(
             .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
             .await
         {
-            Ok(_) => break,
+            Ok(_) => {
+                info!("DEBUG Joind was successful");
+                break
+            },
             Err(err) => info!("Failed to join network, status = {:?}", err),
         }
     }

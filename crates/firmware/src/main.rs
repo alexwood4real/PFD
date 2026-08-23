@@ -48,14 +48,10 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
+    info!("PFD start");
+
     /* Init RP2350 peripherals */
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
-
-    /* Initialize Logger */
-    let driver = UsbDriver::new(p.USB, Irqs);
-    spawner.spawn(unwrap!(logger_task(driver)));
-    info!("Configured logger");
-    info!("PFD start");
 
     info!("DEBUG Configuring CYW43 Wi-Fi chip");
     /* Configure CYW43 chip */
@@ -63,6 +59,11 @@ async fn main(spawner: Spawner) {
         spawner, p.PIN_23, p.PIN_25, p.PIO0, p.PIN_24, p.PIN_29, p.DMA_CH0, Irqs,
     )
     .await;
+
+    /* Initialize Logger */
+    info!("Configure logger");
+    let driver = UsbDriver::new(p.USB, Irqs);
+    spawner.spawn(unwrap!(logger_task(driver)));
 
     /* Configure BME 280 sensor */
     info!("BME PERIFERALS");
