@@ -1,6 +1,5 @@
 use cyw43::{JoinOptions, aligned_bytes};
 use cyw43_pio::{PioSpi, RM2_CLOCK_DIVIDER};
-use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::StackResources;
 use embassy_rp::{
@@ -63,7 +62,7 @@ pub async fn init_cyw43(
 
     /* turn on background driver */
     info!("CYW43 driver initialized");
-    spawner.spawn(unwrap!(cyw43_task(runner)));
+    spawner.spawn(cyw43_task(runner).unwrap());
 
     /* set up the control */
     control.init(clm).await;
@@ -84,7 +83,7 @@ pub async fn init_cyw43(
     );
 
     info!("Spawn net_task");
-    spawner.spawn(unwrap!(net_task(net_runner)));
+    spawner.spawn(net_task(net_runner).unwrap());
 
     /* try to join the network until success */
     info!("DEBUG Joining Network: {} with password: {}", WIFI_NETWORK, WIFI_PASSWORD);
@@ -107,5 +106,5 @@ pub async fn init_cyw43(
 
     /* turn on heartbeat */
     info!("DEBUG Spawn heartbeat task");
-    spawner.spawn(unwrap!(heartbeat_task(control)));
+    spawner.spawn(heartbeat_task(control).unwrap());
 }

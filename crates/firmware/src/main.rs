@@ -14,7 +14,6 @@
 #![no_main]
 
 /* Crates */
-use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::{
     bind_interrupts,
@@ -27,6 +26,7 @@ use embassy_rp::{
 use embassy_time::{Duration, Timer};
 use gdu::psychometric::SensorData;
 use log::info;
+use panic_halt as _;
 
 /* Tasks */
 mod tasks;
@@ -35,8 +35,6 @@ use tasks::logger_task::logger_task;
 /* Drivers */
 mod drivers;
 use drivers::{bme280_driver::init_bme280, cyw43_driver::init_cyw43};
-
-use {defmt_rtt as _, panic_probe as _};
 
 /* Interrupt Handlers */
 bind_interrupts!(struct Irqs {
@@ -53,6 +51,12 @@ async fn main(spawner: Spawner) {
     /* Init RP2350 peripherals */
     let p: embassy_rp::Peripherals = embassy_rp::init(Default::default());
 
+    /* Initialize Logger */
+    info!("Configure logger");
+    let driver = UsbDriver::new(p.USB, Irqs);
+    spawner.spawn(logger_task(driver).unwrap());
+    Timer::after(Duration::from_secs(3)).await;
+
     info!("DEBUG Configuring CYW43 Wi-Fi chip");
     /* Configure CYW43 chip */
     init_cyw43(
@@ -60,20 +64,15 @@ async fn main(spawner: Spawner) {
     )
     .await;
 
-    /* Initialize Logger */
-    info!("Configure logger");
-    let driver = UsbDriver::new(p.USB, Irqs);
-    spawner.spawn(unwrap!(logger_task(driver)));
-
     /* Configure BME 280 sensor */
     info!("BME PERIFERALS");
     let spi = p.SPI0;
-    let sck = p.PIN_2;
-    let sdi = p.PIN_3;
-    let sdo = p.PIN_4;
-    let cs = p.PIN_5;
+    let sck = p.PIN_18;
+    let sdi = p.PIN_19;
+    let sdo = p.PIN_16;
+    let cs = p.PIN_17;
     info!("BEFORE BME INIT");
-    let mut bme280 = init_bme280(spi, sck, sdi, sdo, cs);
+    let mut bme280 = init_bme280(spi, sck, sdi, sdo, cs).unwrap();
     info!("AFTER BME INIT");
 
     /* infinite main loop */
