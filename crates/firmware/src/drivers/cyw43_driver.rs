@@ -14,9 +14,7 @@ use log::{error, info};
 use static_cell::StaticCell;
 
 /* Tasks */
-use crate::tasks::{
-    cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task
-};
+use crate::tasks::{cyw43_task::cyw43_task, heartbeat_task::heartbeat_task, net_task::net_task};
 
 /* Constants */
 const WIFI_NETWORK: &str = env!("WIFI_SSID");
@@ -87,7 +85,10 @@ pub async fn init_cyw43(
     spawner.spawn(net_task(net_runner).unwrap());
 
     /* try to join the network until success */
-    info!("Joining Network: {} with password: {}", WIFI_NETWORK, WIFI_PASSWORD);
+    info!(
+        "Joining Network: {} with password: {}",
+        WIFI_NETWORK, WIFI_PASSWORD
+    );
     loop {
         match control
             .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
@@ -95,8 +96,8 @@ pub async fn init_cyw43(
         {
             Ok(_) => {
                 info!("Joined was successful");
-                break
-            },
+                break;
+            }
             Err(err) => info!("Failed to join network, status = {:?}", err),
         }
     }

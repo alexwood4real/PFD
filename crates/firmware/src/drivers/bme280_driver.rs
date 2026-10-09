@@ -1,9 +1,9 @@
 use bme280::spi::BME280;
 use embassy_rp::{
-    Peri, 
-    peripherals::{SPI0, PIN_16, PIN_17, PIN_18, PIN_19}, 
-    spi::{Config, Spi},
+    Peri,
     gpio::{Level, Output},
+    peripherals::{PIN_16, PIN_17, PIN_18, PIN_19, SPI0},
+    spi::{Config, Spi},
 };
 use embassy_time::Delay;
 use embedded_hal_1::spi::{ErrorType, Operation, SpiDevice};
@@ -24,7 +24,8 @@ impl<D: SpiDevice> SpiDevice for Bme280SpiFix<D> {
     fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
         if write.len() == 1 && !read.is_empty() {
             // register read: address byte, then data bytes
-            self.0.transaction(&mut [Operation::Write(write), Operation::Read(read)])
+            self.0
+                .transaction(&mut [Operation::Write(write), Operation::Read(read)])
         } else {
             // register writes ([reg, value]) work as-is
             self.0.transaction(&mut [Operation::Transfer(read, write)])
@@ -32,11 +33,9 @@ impl<D: SpiDevice> SpiDevice for Bme280SpiFix<D> {
     }
 }
 
-pub type BME280Spi = Bme280SpiFix<ExclusiveDevice<
-    Spi<'static, SPI0, embassy_rp::spi::Blocking>,
-    Output<'static>,
-    NoDelay,
->>;
+pub type BME280Spi = Bme280SpiFix<
+    ExclusiveDevice<Spi<'static, SPI0, embassy_rp::spi::Blocking>, Output<'static>, NoDelay>,
+>;
 
 pub fn init_bme280(
     spi_periph: Peri<'static, SPI0>,

@@ -51,13 +51,20 @@ const PANIC_MAGIC: u32 = 0x5041_4E43;
 
 /* Debugging */
 #[repr(C)]
-struct PanicRecord { magic: u32, len: u32, msg: [u8; 240] }
+struct PanicRecord {
+    magic: u32,
+    len: u32,
+    msg: [u8; 240],
+}
 
 // .uninit is not zeroed at boot, so this survives a reset
 #[unsafe(link_section = ".uninit.panic_record")]
 static mut PANIC_RECORD: MaybeUninit<PanicRecord> = MaybeUninit::uninit();
 
-struct Cursor<'a> { buf: &'a mut [u8], pos: usize }
+struct Cursor<'a> {
+    buf: &'a mut [u8],
+    pos: usize,
+}
 impl Write for Cursor<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         let n = s.len().min(self.buf.len() - self.pos);
@@ -70,7 +77,10 @@ impl Write for Cursor<'_> {
 fn record(args: core::fmt::Arguments) -> ! {
     unsafe {
         let rec = addr_of_mut!(PANIC_RECORD) as *mut PanicRecord;
-        let mut c = Cursor { buf: &mut *addr_of_mut!((*rec).msg), pos: 0 };
+        let mut c = Cursor {
+            buf: &mut *addr_of_mut!((*rec).msg),
+            pos: 0,
+        };
         let _ = c.write_fmt(args);
         (*rec).len = c.pos as u32;
         (*rec).magic = PANIC_MAGIC;
@@ -85,7 +95,11 @@ fn panic(info: &PanicInfo) -> ! {
 
 #[cortex_m_rt::exception]
 unsafe fn HardFault(ef: &cortex_m_rt::ExceptionFrame) -> ! {
-    record(format_args!("HardFault pc={:#010x} lr={:#010x}", ef.pc(), ef.lr()))
+    record(format_args!(
+        "HardFault pc={:#010x} lr={:#010x}",
+        ef.pc(),
+        ef.lr()
+    ))
 }
 
 fn report_last_panic() {
@@ -135,7 +149,7 @@ async fn main(spawner: Spawner) {
         Err(_) => loop {
             error!("BME 280 init failed, check wiring");
             Timer::after_secs(1).await;
-        }
+        },
     };
 
     /* launch sensor tasks */
@@ -147,10 +161,8 @@ async fn main(spawner: Spawner) {
 #[unsafe(link_section = ".bi_entries")]
 #[used]
 pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
-    embassy_rp::binary_info::rp_program_name!(c"barometer"),
-    embassy_rp::binary_info::rp_program_description!(
-        c"This program runs the Primary Flight Deck."
-    ),
+    embassy_rp::binary_info::rp_program_name!(c"PFD"),
+    embassy_rp::binary_info::rp_program_description!(c"This program runs the Primary Flight Deck."),
     embassy_rp::binary_info::rp_cargo_version!(),
     embassy_rp::binary_info::rp_program_build_attribute!(),
 ];
