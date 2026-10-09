@@ -6,15 +6,37 @@ use embassy_rp::{
     gpio::{Level, Output},
 };
 use embassy_time::Delay;
+use embedded_hal_1::spi::{ErrorType, Operation, SpiDevice};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use log::{error, info};
-use panic_halt as _;
 
-type BME280Spi = ExclusiveDevice<
+pub struct Bme280SpiFix<D>(pub D);
+
+impl<D: SpiDevice> ErrorType for Bme280SpiFix<D> {
+    type Error = D::Error;
+}
+
+impl<D: SpiDevice> SpiDevice for Bme280SpiFix<D> {
+    fn transaction(&mut self, ops: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
+        self.0.transaction(ops)
+    }
+
+    fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
+        if write.len() == 1 && !read.is_empty() {
+            // register read: address byte, then data bytes
+            self.0.transaction(&mut [Operation::Write(write), Operation::Read(read)])
+        } else {
+            // register writes ([reg, value]) work as-is
+            self.0.transaction(&mut [Operation::Transfer(read, write)])
+        }
+    }
+}
+
+type BME280Spi = Bme280SpiFix<ExclusiveDevice<
     Spi<'static, SPI0, embassy_rp::spi::Blocking>,
     Output<'static>,
     NoDelay,
->;
+>>;
 
 pub fn init_bme280(
     spi_periph: Peri<'static, SPI0>,
@@ -32,10 +54,16 @@ pub fn init_bme280(
     let spi_bus = Spi::new_blocking(spi_periph, sck, sdi, sdo, config);
     let spi_device = ExclusiveDevice::new_no_delay(spi_bus, spi_cs).unwrap();
 
-    let mut bme280 = match BME280::new(spi_device) {
+    // let mut buf = [0xD0, 0x00]; // 0xD0 = ID register, bit 7 set means read
+    // match spi_device.transfer_in_place(&mut buf) {
+    //     Ok(()) => info!("BME raw chip ID = {:#04x}", buf[1]),
+    //     Err(e) => error!("raw ID read failed: {:?}", e),
+    // }
+
+    let mut bme280 = match BME280::new(Bme280SpiFix(spi_device)) {
         Ok(b) => b,
-        Err(_) => {
-            error!("BME280 new() failed");
+        Err(e) => {
+            error!("BME280 new() failed: {:?}", e);
             return Err(());
         }
     };
@@ -43,8 +71,8 @@ pub fn init_bme280(
 
     info!("bme initialization");
     let mut delay = Delay;
-    if bme280.init(&mut delay).is_err() {
-        error!("BME280 init failed - check chip id and wiring");
+    if let Err(e) = bme280.init(&mut delay) {
+        error!("BME280 init failed: {:?}", e);
         return Err(());
     };
 

@@ -9,7 +9,8 @@ use embassy_rp::{
     peripherals::{DMA_CH0, PIN_23, PIN_24, PIN_25, PIN_29, PIO0},
     pio::Pio,
 };
-use log::info;
+use embassy_time::{Duration, with_timeout};
+use log::{error, info};
 use static_cell::StaticCell;
 
 /* Tasks */
@@ -102,7 +103,12 @@ pub async fn init_cyw43(
 
     /* Wi-Fi has been connected, waiting for DHCP */
     info!("DEBUG Wi-Fi connected");
-    stack.wait_config_up().await;
+    match with_timeout(Duration::from_secs(20), stack.wait_config_up()).await {
+        Ok(()) => info!("DHCP up: {:?}", stack.config_v4()),
+        Err(_) => {
+            error!("DHCP timeout. link_up={}", stack.is_link_up());
+        }
+    }
 
     /* turn on heartbeat */
     info!("DEBUG Spawn heartbeat task");

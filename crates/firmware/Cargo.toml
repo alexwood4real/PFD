@@ -6,10 +6,9 @@ version = "0.1.0"
 [dependencies]
 gdu = { path = "../gdu" }
 
-bme280-rs = { version = "0.4.1" }
+bme280 = "0.5.1"
 cortex-m = { version = "0.7.6", features = ["inline-asm"] }
 cortex-m-rt = "0.7.0"
-panic-halt = "1.0"
 
 embassy-embedded-hal = { version = "0.6.0" }
 embassy-sync = { version = "0.8.0" }
@@ -33,7 +32,6 @@ portable-atomic = { version = "1.5", features = ["critical-section"] }
 log = "0.4"
 embedded-sdmmc = "0.10.0"
 serde-json-core = "0.6"
-bme280 = "0.5.1"
 
 [build-dependencies]
 regex = "1.11.0"
