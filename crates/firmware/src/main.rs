@@ -139,7 +139,7 @@ async fn main(spawner: Spawner) {
     };
 
     /* launch sensor tasks */
-    info!("Call sensor tasks");
+    info!("Spawn sensor tasks");
     spawner.spawn(bme280_task(bme280).unwrap());
 }
 

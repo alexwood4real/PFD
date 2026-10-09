@@ -94,7 +94,7 @@ pub async fn init_cyw43(
             .await
         {
             Ok(_) => {
-                info!("Joind was successful");
+                info!("Joined was successful");
                 break
             },
             Err(err) => info!("Failed to join network, status = {:?}", err),
