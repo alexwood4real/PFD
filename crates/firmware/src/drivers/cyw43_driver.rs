@@ -87,14 +87,14 @@ pub async fn init_cyw43(
     spawner.spawn(net_task(net_runner).unwrap());
 
     /* try to join the network until success */
-    info!("DEBUG Joining Network: {} with password: {}", WIFI_NETWORK, WIFI_PASSWORD);
+    info!("Joining Network: {} with password: {}", WIFI_NETWORK, WIFI_PASSWORD);
     loop {
         match control
             .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
             .await
         {
             Ok(_) => {
-                info!("DEBUG Joind was successful");
+                info!("Joind was successful");
                 break
             },
             Err(err) => info!("Failed to join network, status = {:?}", err),
@@ -102,7 +102,7 @@ pub async fn init_cyw43(
     }
 
     /* Wi-Fi has been connected, waiting for DHCP */
-    info!("DEBUG Wi-Fi connected");
+    info!("Wi-Fi connected");
     match with_timeout(Duration::from_secs(20), stack.wait_config_up()).await {
         Ok(()) => info!("DHCP up: {:?}", stack.config_v4()),
         Err(_) => {
@@ -111,6 +111,6 @@ pub async fn init_cyw43(
     }
 
     /* turn on heartbeat */
-    info!("DEBUG Spawn heartbeat task");
+    info!("Spawn heartbeat task");
     spawner.spawn(heartbeat_task(control).unwrap());
 }

@@ -32,7 +32,7 @@ impl<D: SpiDevice> SpiDevice for Bme280SpiFix<D> {
     }
 }
 
-type BME280Spi = Bme280SpiFix<ExclusiveDevice<
+pub type BME280Spi = Bme280SpiFix<ExclusiveDevice<
     Spi<'static, SPI0, embassy_rp::spi::Blocking>,
     Output<'static>,
     NoDelay,
@@ -45,37 +45,29 @@ pub fn init_bme280(
     sdo: Peri<'static, PIN_16>,
     cs: Peri<'static, PIN_17>,
 ) -> Result<BME280<BME280Spi>, ()> {
-    info!("INSIDE BME INIT");
     let mut config = Config::default();
     config.frequency = 1_000_000; // 1 MHz
 
-    info!("bme set up spi device and bus");
+    info!("BME 280 set up spi device and bus");
     let spi_cs = Output::new(cs, Level::High);
     let spi_bus = Spi::new_blocking(spi_periph, sck, sdi, sdo, config);
     let spi_device = ExclusiveDevice::new_no_delay(spi_bus, spi_cs).unwrap();
 
-    // let mut buf = [0xD0, 0x00]; // 0xD0 = ID register, bit 7 set means read
-    // match spi_device.transfer_in_place(&mut buf) {
-    //     Ok(()) => info!("BME raw chip ID = {:#04x}", buf[1]),
-    //     Err(e) => error!("raw ID read failed: {:?}", e),
-    // }
-
     let mut bme280 = match BME280::new(Bme280SpiFix(spi_device)) {
         Ok(b) => b,
         Err(e) => {
-            error!("BME280 new() failed: {:?}", e);
+            error!("BME 280 new() failed: {:?}", e);
             return Err(());
         }
     };
 
-
-    info!("bme initialization");
+    info!("BME 280 initialization");
     let mut delay = Delay;
     if let Err(e) = bme280.init(&mut delay) {
-        error!("BME280 init failed: {:?}", e);
+        error!("BME 280 init failed: {:?}", e);
         return Err(());
     };
 
-    info!("bme init success");
+    info!("BME 280 init success");
     Ok(bme280)
 }
